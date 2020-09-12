@@ -1,21 +1,29 @@
 package io.suprgames.sqs
 
 import io.suprgames.kjson.kJsonMapper
+import io.suprgames.sqs.SqsPublisher.Companion.AGGREGATE_ID
+import io.suprgames.sqs.SqsPublisher.Companion.sqsAttVal
 import org.apache.logging.log4j.LogManager
 import software.amazon.awssdk.services.sqs.SqsAsyncClient
-import software.amazon.awssdk.services.sqs.model.MessageAttributeValue
-import software.amazon.awssdk.services.sqs.model.SendMessageRequest
-import software.amazon.awssdk.services.sqs.model.SendMessageResponse
+import software.amazon.awssdk.services.sqs.model.*
 import java.util.concurrent.CompletableFuture
 
 
 /**
  * The SqsPublisher is a utility class that help us while publishing events the Event Driven Queue
  *
- * @property queueName The name of the Sqs queue
- * @property source Identifier for WHO is publishing the event in the queue
+ * @property queueUrl
+ *              The url of the Sqs queue
+ *              As a recommendation, you could define it like this in the environment variables in serverless-base.yml
+ *                  https://sqs.${self:provider.region}.amazonaws.com/#{AWS::AccountId}/${self:custom.eventQueueName}
+ *              Important:
+ *                  * We have used the "serverless-pseudo-parameters" plugin to retrieve #{AWS::AccountId}
+ *                  * We have a variable for the eventQueueName
+ *
+ * @property source
+ *              Identifier for WHO is publishing the event in the queue
  */
-open class SqsPublisher(private val queueName: String, private val source: String) {
+open class SqsPublisher(private val queueUrl: String, private val source: String) {
 
     companion object {
         const val AGGREGATE_ID = "aggregateId"
@@ -55,8 +63,29 @@ open class SqsPublisher(private val queueName: String, private val source: Strin
                             .builder()
                             .messageGroupId(event.traceId)
                             .eventProcess(event)
-                            .queueUrl(System.getenv("urlFor$queueName"))
+                            .queueUrl(queueUrl)
                             .build())
+
+    /**
+     * Publisher method for a SqsEvent list as batch
+     *
+     * @param event The event to publish
+     * @return A completable future with the SendMessageResponse resulted on the event publishing
+     */
+    fun <T : SqsEvent> publishBatch(events: List<T>): CompletableFuture<SendMessageBatchResponse> =
+            sqsClient().sendMessageBatch(
+                    SendMessageBatchRequest
+                            .builder()
+                            .entries(events.map {
+                                SendMessageBatchRequestEntry
+                                        .builder()
+                                        .messageGroupId(it.traceId)
+                                        .eventProcess(it)
+                                        .build()
+                            })
+                            .queueUrl(queueUrl)
+                            .build()
+            )
 
     /**
      * Helper method to process the event within the SendMessageRequest builder context
@@ -64,13 +93,33 @@ open class SqsPublisher(private val queueName: String, private val source: Strin
      * @param event The event to add to the send message request
      * @return A SendMessageRequest.Builder that contains the event processed
      */
-    private fun <T : SqsEvent> SendMessageRequest.Builder.eventProcess(event: T): SendMessageRequest.Builder {
-        val attributes = mapOf(
-                AGGREGATE_ID to event.aggregateId.sqsAttVal(),
-                SOURCE to source.sqsAttVal(),
-                DETAIL_TYPE to event::class.qualifiedName!!.sqsAttVal())
-        logger.info("Attributes: $attributes")
-        logger.info("Event: ${kJsonMapper.writeValueAsString(event)}")
-        return this.messageAttributes(attributes).messageBody(kJsonMapper.writeValueAsString(event))
-    }
+    private fun <T : SqsEvent> SendMessageRequest.Builder.eventProcess(event: T): SendMessageRequest.Builder =
+            event.toAttributesMap().let {
+                logger.info("Attributes: $it")
+                logger.info("Event: ${kJsonMapper.writeValueAsString(this)}")
+                this.messageAttributes(it).messageBody(kJsonMapper.writeValueAsString(event))
+            }
+
+    /**
+     * Helper method to process the event within the SendMessageBatchRequestEntry builder context
+     *
+     * @param event The event to add to the send message request
+     * @return A SendMessageRequest.Builder that contains the event processed
+     */
+    private fun <T : SqsEvent> SendMessageBatchRequestEntry.Builder.eventProcess(event: T): SendMessageBatchRequestEntry.Builder =
+            event.toAttributesMap().let {
+                logger.info("Attributes: $it")
+                logger.info("Event: ${kJsonMapper.writeValueAsString(this)}")
+                this.messageAttributes(it).messageBody(kJsonMapper.writeValueAsString(event))
+            }
+
+    /**
+     * Helper method to generate the main attributes map from this SQS event
+     *
+     * @return Map containing the MessageAttributeValue
+     */
+    private fun <T : SqsEvent> T.toAttributesMap(): Map<String, MessageAttributeValue> =
+            mapOf(AGGREGATE_ID to this.aggregateId.sqsAttVal(),
+                    SOURCE to source.sqsAttVal(),
+                    DETAIL_TYPE to this::class.qualifiedName!!.sqsAttVal())
 }
