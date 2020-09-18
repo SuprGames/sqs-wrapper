@@ -30,7 +30,6 @@ dependencyManagement {
 dependencies {
     //We want to provide the AWS SQS library here
     api("software.amazon.awssdk:sqs")
-    implementation(kotlin("stdlib-jdk8"))
     implementation("io.suprgames:kjson-mapper:v0.1.0")
     implementation("com.amazonaws:aws-lambda-java-core:1.2.1")
     implementation("com.amazonaws:aws-lambda-java-log4j2:1.2.0")
