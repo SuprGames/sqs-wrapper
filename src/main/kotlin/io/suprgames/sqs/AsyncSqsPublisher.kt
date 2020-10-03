@@ -93,7 +93,7 @@ class AsyncSqsPublisher(private val queueUrl: String) : SqsPublisher {
     private fun <T : SqsEvent> SendMessageRequest.Builder.eventProcess(event: T, source: String): SendMessageRequest.Builder =
             event.toAttributesMap(source).let {
                 logger.info("Attributes: $it")
-                logger.info("Event: ${kJsonMapper.writeValueAsString(this)}")
+                logger.info("Event: ${kJsonMapper.writeValueAsString(event)}")
                 this.messageAttributes(it).messageBody(kJsonMapper.writeValueAsString(event))
             }
 
@@ -106,7 +106,7 @@ class AsyncSqsPublisher(private val queueUrl: String) : SqsPublisher {
     private fun <T : SqsEvent> SendMessageBatchRequestEntry.Builder.eventProcess(event: T, source: String): SendMessageBatchRequestEntry.Builder =
             event.toAttributesMap(source).let {
                 logger.info("Attributes: $it")
-                logger.info("Event: ${kJsonMapper.writeValueAsString(this)}")
+                logger.info("Event: ${kJsonMapper.writeValueAsString(event)}")
                 this.messageAttributes(it).messageBody(kJsonMapper.writeValueAsString(event))
             }
 
