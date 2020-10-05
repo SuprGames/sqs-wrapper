@@ -4,6 +4,7 @@ import io.suprgames.kjson.kJsonMapper
 import org.apache.logging.log4j.LogManager
 import software.amazon.awssdk.services.sqs.SqsAsyncClient
 import software.amazon.awssdk.services.sqs.model.*
+import java.util.*
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -77,6 +78,7 @@ class AsyncSqsPublisher(private val queueUrl: String) : SqsPublisher {
                             .entries(events.map {
                                 SendMessageBatchRequestEntry.builder()
                                         .messageGroupId(it.traceId)
+                                        .id(UUID.randomUUID().toString())
                                         .eventProcess(it, source)
                                         .build()
                             })
